@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>挂机RPG</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+    .container { max-width: 480px; margin: 0 auto; padding: 10px; }
+
+    /* 顶部状态栏 */
+    .status-bar { background: #16213e; border-radius: 12px; padding: 15px; margin-bottom: 10px; }
+    .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .status-row:last-child { margin-bottom: 0; }
+    .level { font-size: 18px; font-weight: bold; color: #ffd700; }
+    .gold { color: #ffd700; }
+    .bar-container { display: flex; align-items: center; gap: 8px; flex: 1; }
+    .bar-label { font-size: 12px; width: 30px; }
+    .bar { flex: 1; height: 16px; background: #0f3460; border-radius: 8px; overflow: hidden; }
+    .bar-fill { height: 100%; transition: width 0.2s; border-radius: 8px; }
+    .hp-fill { background: linear-gradient(90deg, #e74c3c, #c0392b); }
+    .mp-fill { background: linear-gradient(90deg, #3498db, #2980b9); }
+    .exp-fill { background: linear-gradient(90deg, #2ecc71, #27ae60); }
+    .bar-text { font-size: 11px; min-width: 60px; text-align: right; }
+
+    /* 战斗区域 */
+    .battle-area { background: #16213e; border-radius: 12px; padding: 15px; margin-bottom: 10px; }
+    .battle-header { text-align: center; margin-bottom: 10px; color: #888; font-size: 14px; }
+    .battle-field { display: flex; justify-content: space-around; align-items: center; margin-bottom: 15px; }
+    .combatant { text-align: center; }
+    .combatant-avatar { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 40px; margin: 0 auto 8px; }
+    .player-avatar { background: linear-gradient(135deg, #3498db, #2980b9); }
+    .monster-avatar { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .combatant-name { font-weight: bold; margin-bottom: 5px; }
+    .combatant-hp { width: 100px; height: 12px; background: #0f3460; border-radius: 6px; margin: 0 auto; overflow: hidden; }
+    .combatant-hp-fill { height: 100%; background: linear-gradient(90deg, #e74c3c, #c0392b); transition: width 0.2s; }
+    .vs { font-size: 24px; font-weight: bold; color: #ffd700; }
+
+    .combat-log { background: #0f3460; border-radius: 8px; padding: 10px; height: 80px; overflow-y: auto; font-size: 12px; }
+    .log-entry { margin-bottom: 4px; }
+    .log-damage { color: #e74c3c; }
+    .log-heal { color: #2ecc71; }
+    .log-levelup { color: #ffd700; }
+    .log-drop { color: #9b59b6; }
+
+    /* 技能栏 */
+    .skill-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+    .skill-btn { background: #16213e; border: 2px solid #0f3460; border-radius: 10px; padding: 12px 8px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+    .skill-btn:hover:not(.disabled) { border-color: #3498db; transform: scale(1.02); }
+    .skill-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+    .skill-btn.on-cooldown { opacity: 0.6; }
+    .skill-name { font-size: 12px; font-weight: bold; margin-bottom: 4px; }
+    .skill-cost { font-size: 10px; color: #3498db; }
+    .skill-cd { position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,0.7); border-radius: 50%; width: 20px; height: 20px; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+    .skill-icon { font-size: 24px; margin-bottom: 4px; }
+
+    /* Tab栏 */
+    .tab-bar { display: flex; background: #16213e; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+    .tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; transition: background 0.2s; font-size: 14px; }
+    .tab:hover { background: #0f3460; }
+    .tab.active { background: #0f3460; color: #3498db; }
+
+    /* 内容面板 */
+    .panel { background: #16213e; border-radius: 12px; padding: 15px; display: none; }
+    .panel.active { display: block; }
+
+    /* 背包 */
+    .inventory { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .item { background: #0f3460; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: transform 0.2s; }
+    .item:hover { transform: scale(1.05); }
+    .item.quality-0 { border: 2px solid #888; }
+    .item.quality-1 { border: 2px solid #2ecc71; }
+    .item.quality-2 { border: 2px solid #3498db; }
+    .item.quality-3 { border: 2px solid #9b59b6; }
+    .item.quality-4 { border: 2px solid #f39c12; }
+    .item-icon { font-size: 24px; margin-bottom: 4px; }
+    .item-name { font-size: 11px; }
+
+    /* 装备栏 */
+    .equipment-slots { display: flex; justify-content: space-around; margin-bottom: 15px; }
+    .equip-slot { background: #0f3460; border-radius: 8px; padding: 10px; text-align: center; width: 70px; }
+    .equip-slot-label { font-size: 10px; color: #888; margin-bottom: 4px; }
+    .equip-slot-icon { font-size: 24px; }
+    .equip-slot-empty { color: #444; }
+
+    /* 商店 */
+    .shop-item { background: #0f3460; border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .shop-item-info { flex: 1; }
+    .shop-item-name { font-weight: bold; margin-bottom: 4px; }
+    .shop-item-desc { font-size: 12px; color: #888; }
+    .shop-btn { background: #3498db; border: none; border-radius: 6px; padding: 8px 16px; color: white; cursor: pointer; }
+    .shop-btn:hover { background: #2980b9; }
+    .shop-btn:disabled { background: #555; cursor: not-allowed; }
+
+    /* 设置 */
+    .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #0f3460; }
+    .setting-btn { background: #3498db; border: none; border-radius: 6px; padding: 8px 16px; color: white; cursor: pointer; }
+
+    /* 游戏结束遮罩 */
+    .game-over-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 100; }
+    .game-over-overlay.show { display: flex; }
+    .game-over-box { background: #16213e; border-radius: 16px; padding: 30px; text-align: center; }
+    .game-over-title { font-size: 24px; font-weight: bold; color: #e74c3c; margin-bottom: 15px; }
+    .game-over-btns { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+    .go-btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    .go-btn-revive { background: #e74c3c; color: white; }
+    .go-btn-retry { background: #3498db; color: white; }
+
+    /* 波次信息 */
+    .wave-info { text-align: center; font-size: 14px; color: #888; margin-bottom: 10px; }
+    .wave-info span { color: #ffd700; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 状态栏 -->
+    <div class="status-bar">
+      <div class="status-row">
+        <span class="level" id="level">Lv.1</span>
+        <span class="gold">💰 <span id="gold">0</span></span>
+      </div>
+      <div class="status-row">
+        <div class="bar-container">
+          <span class="bar-label">HP</span>
+          <div class="bar"><div class="bar-fill hp-fill" id="hp-bar"></div></div>
+          <span class="bar-text" id="hp-text">100/100</span>
+        </div>
+      </div>
+      <div class="status-row">
+        <div class="bar-container">
+          <span class="bar-label">MP</span>
+          <div class="bar"><div class="bar-fill mp-fill" id="mp-bar"></div></div>
+          <span class="bar-text" id="mp-text">50/50</span>
+        </div>
+      </div>
+      <div class="status-row">
+        <div class="bar-container">
+          <span class="bar-label">EXP</span>
+          <div class="bar"><div class="bar-fill exp-fill" id="exp-bar"></div></div>
+          <span class="bar-text" id="exp-text">0/100</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 战斗区域 -->
+    <div class="battle-area">
+      <div class="battle-header" id="map-name">草原 - 第 1 波</div>
+      <div class="battle-field">
+        <div class="combatant">
+          <div class="combatant-avatar player-avatar">⚔️</div>
+          <div class="combatant-name">勇者</div>
+          <div class="combatant-hp"><div class="combatant-hp-fill" id="player-hp-bar"></div></div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="combatant">
+          <div class="combatant-avatar monster-avatar" id="monster-avatar">👹</div>
+          <div class="combatant-name" id="monster-name">史莱姆</div>
+          <div class="combatant-hp"><div class="combatant-hp-fill" id="monster-hp-bar"></div></div>
+        </div>
+      </div>
+      <div class="combat-log" id="combat-log"></div>
+    </div>
+
+    <!-- 技能栏 -->
+    <div class="skill-bar">
+      <div class="skill-btn" onclick="useSkill(0)">
+        <div class="skill-icon">👊</div>
+        <div class="skill-name">攻击</div>
+        <div class="skill-cost">无消耗</div>
+        <div class="skill-cd" id="cd-0" style="display:none"></div>
+      </div>
+      <div class="skill-btn" onclick="useSkill(1)">
+        <div class="skill-icon">💥</div>
+        <div class="skill-name">重击</div>
+        <div class="skill-cost">20MP</div>
+        <div class="skill-cd" id="cd-1" style="display:none"></div>
+      </div>
+      <div class="skill-btn" onclick="useSkill(2)">
+        <div class="skill-icon">🩸</div>
+        <div class="skill-name">吸血</div>
+        <div class="skill-cost">30MP</div>
+        <div class="skill-cd" id="cd-2" style="display:none"></div>
+      </div>
+      <div class="skill-btn" onclick="useSkill(3)">
+        <div class="skill-icon">🌟</div>
+        <div class="skill-name">AOE</div>
+        <div class="skill-cost">40MP</div>
+        <div class="skill-cd" id="cd-3" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Tab栏 -->
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('backpack')">背包</div>
+      <div class="tab" onclick="switchTab('skills')">技能</div>
+      <div class="tab" onclick="switchTab('shop')">商店</div>
+      <div class="tab" onclick="switchTab('settings')">设置</div>
+    </div>
+
+    <!-- 背包面板 -->
+    <div class="panel active" id="panel-backpack">
+      <div class="equipment-slots">
+        <div class="equip-slot" onclick="showEquipSlot('weapon')">
+          <div class="equip-slot-label">武器</div>
+          <div class="equip-slot-icon" id="equip-weapon">⚔️</div>
+        </div>
+        <div class="equip-slot" onclick="showEquipSlot('armor')">
+          <div class="equip-slot-label">防具</div>
+          <div class="equip-slot-icon" id="equip-armor">🛡️</div>
+        </div>
+        <div class="equip-slot" onclick="showEquipSlot('accessory')">
+          <div class="equip-slot-label">饰品</div>
+          <div class="equip-slot-icon" id="equip-accessory">💍</div>
+        </div>
+      </div>
+      <div class="inventory" id="inventory"></div>
+    </div>
+
+    <!-- 技能面板 -->
+    <div class="panel" id="panel-skills">
+      <div style="margin-bottom: 15px;">
+        <p style="color: #888; margin-bottom: 10px;">技能点: <span id="skill-points" style="color: #ffd700;">0</span></p>
+        <div style="background: #0f3460; border-radius: 8px; padding: 10px;">
+          <p>普通攻击 Lv.<span id="skill0-level">1</span> - 基础伤害 100%</p>
+          <p>重击 Lv.<span id="skill1-level">1</span> - 200% 伤害, 5秒冷却</p>
+          <p>吸血 Lv.<span id="skill2-level">1</span> - 80% 伤害并治疗</p>
+          <p>AOE Lv.<span id="skill3-level">1</span> - 60% 群体伤害</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 商店面板 -->
+    <div class="panel" id="panel-shop">
+      <div class="shop-item">
+        <div class="shop-item-info">
+          <div class="shop-item-name">随机装备</div>
+          <div class="shop-item-desc">随机品质装备一件</div>
+        </div>
+        <button class="shop-btn" onclick="buyItem('random')">💰 100</button>
+      </div>
+      <div class="shop-item">
+        <div class="shop-item-info">
+          <div class="shop-item-name">生命药水</div>
+          <div class="shop-item-desc">恢复50%最大生命值</div>
+        </div>
+        <button class="shop-btn" onclick="buyItem('hp')">💰 50</button>
+      </div>
+      <div class="shop-item">
+        <div class="shop-item-info">
+          <div class="shop-item-name">魔法药水</div>
+          <div class="shop-item-desc">恢复50%最大魔法值</div>
+        </div>
+        <button class="shop-btn" onclick="buyItem('mp')">💰 50</button>
+      </div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div class="panel" id="panel-settings">
+      <div class="setting-item">
+        <span>自动攻击</span>
+        <label style="cursor:pointer"><input type="checkbox" id="auto-attack" checked onchange="saveGame()"> 启用</label>
+      </div>
+      <div class="setting-item">
+        <span>存档状态</span>
+        <span id="save-status" style="color: #2ecc71;">已保存</span>
+      </div>
+      <div class="setting-item">
+        <button class="setting-btn" onclick="manualSave()">💾 手动存档</button>
+        <button class="setting-btn" onclick="resetGame()">🔄 重置游戏</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 游戏结束遮罩 -->
+  <div class="game-over-overlay" id="game-over">
+    <div class="game-over-box">
+      <div class="game-over-title">💀 游戏结束</div>
+      <p id="death-info">你被击败了</p>
+      <div class="game-over-btns">
+        <button class="go-btn go-btn-revive" onclick="revive()">💰 复活 (100金币)</button>
+        <button class="go-btn go-btn-retry" onclick="retry()">重新开始</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============ 游戏配置 ============
+    const MAPS = [
+      { name: '草原', waves: 10, boss: '草狼王', baseHp: 50, baseAtk: 5, exp: 10, gold: 5 },
+      { name: '森林', waves: 10, boss: '树精', baseHp: 80, baseAtk: 8, exp: 20, gold: 10 },
+      { name: '山洞', waves: 10, boss: '石魔像', baseHp: 120, baseAtk: 12, exp: 35, gold: 18 },
+      { name: '火山', waves: 10, boss: '熔岩巨人', baseHp: 180, baseAtk: 18, exp: 55, gold: 28 },
+      { name: '冰原', waves: 10, boss: '冰霜巨龙', baseHp: 250, baseAtk: 25, exp: 80, gold: 40 }
+    ];
+
+    const QUALITIES = ['白', '绿', '蓝', '紫', '橙'];
+    const QUALITY_COLORS = ['#888', '#2ecc71', '#3498db', '#9b59b6', '#f39c12'];
+    const QUALITY_DROP = [0.60, 0.25, 0.10, 0.04, 0.01];
+
+    const MONSTERS = ['👹', '🐺', '🦇', '🐍', '💀', '👻', '🤖', '🔥', '❄️', '🐉'];
+    const MONSTER_NAMES = ['史莱姆', '野狼', '蝙蝠', '毒蛇', '骷髅', '幽灵', '石魔', '火元素', '冰元素', '巨龙'];
+
+    const SKILLS = [
+      { name: '攻击', cost: 0, cooldown: 0, multiplier: 1.0, type: 'damage' },
+      { name: '重击', cost: 20, cooldown: 5000, multiplier: 2.0, type: 'damage' },
+      { name: '吸血', cost: 30, cooldown: 8000, multiplier: 0.8, type: 'lifesteal' },
+      { name: 'AOE', cost: 40, cooldown: 10000, multiplier: 0.6, type: 'aoe' }
+    ];
+
+    // ============ 游戏状态 ============
+    let game = {
+      level: 1, exp: 0, gold: 0,
+      hp: 100, maxHp: 100, mp: 50, maxMp: 50, atk: 10, def: 2,
+      critRate: 0.1,
+      currentMap: 0, currentWave: 1,
+      equipment: { weapon: null, armor: null, accessory: null },
+      inventory: [],
+      skillLevels: [1, 1, 1, 1],
+      skillCooldowns: [0, 0, 0, 0],
+      autoAttack: true,
+      totalPlayTime: 0,
+      lastSaveTime: Date.now()
+    };
+
+    let monster = null;
+    let gameRunning = true;
+    let lastTick = Date.now();
+
+    // ============ 工具函数 ============
+    function formatNum(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return Math.floor(n);
+    }
+
+    function random(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function getQuality() {
+      const r = Math.random();
+      let cum = 0;
+      for (let i = 0; i < QUALITY_DROP.length; i++) {
+        cum += QUALITY_DROP[i];
+        if (r < cum) return i;
+      }
+      return 0;
+    }
+
+    function getExpForLevel(level) {
+      return Math.floor(100 * Math.pow(level, 1.5));
+    }
+
+    // ============ 存档系统 ============
+    function saveGame() {
+      game.lastSaveTime = Date.now();
+      localStorage.setItem('idleRpgSave', JSON.stringify(game));
+      const status = document.getElementById('save-status');
+      status.textContent = '已保存 ' + new Date().toLocaleTimeString();
+    }
+
+    function loadGame() {
+      const saved = localStorage.getItem('idleRpgSave');
+      if (saved) {
+        const loaded = JSON.parse(saved);
+        game = { ...game, ...loaded };
+
+        // 计算离线收益
+        const offlineTime = (Date.now() - game.lastSaveTime) / 1000;
+        if (offlineTime > 60) {
+          const offlineGold = Math.floor(offlineTime * 0.5);
+          const offlineExp = Math.floor(offlineTime * 0.2);
+          game.gold += offlineGold;
+          addExp(offlineExp);
+          addLog(`离线 ${Math.floor(offlineTime / 60)} 分钟，获得 ${offlineGold} 金币和 ${offlineExp} 经验`, 'levelup');
+        }
+
+        updateUI();
+        spawnMonster();
+      }
+    }
+
+    function manualSave() {
+      saveGame();
+    }
+
+    function resetGame() {
+      if (confirm('确定要重置游戏吗？所有进度将丢失！')) {
+        localStorage.removeItem('idleRpgSave');
+        location.reload();
+      }
+    }
+
+    // ============ 战斗系统 ============
+    function spawnMonster() {
+      const map = MAPS[game.currentMap];
+      const isBoss = game.currentWave === map.waves;
+      const isElite = game.currentWave === 5;
+
+      let hp = map.baseHp * (1 + (game.currentWave - 1) * 0.15);
+      let atk = map.baseAtk * (1 + (game.currentWave - 1) * 0.1);
+
+      if (isElite) { hp *= 2; atk *= 2; }
+      if (isBoss) { hp *= 5; atk *= 5; }
+
+      const monsterIndex = game.currentMap % MONSTER_NAMES.length;
+      monster = {
+        name: isBoss ? map.boss : (isElite ? '精英' + MONSTER_NAMES[monsterIndex] : MONSTER_NAMES[monsterIndex]),
+        hp: Math.floor(hp),
+        maxHp: Math.floor(hp),
+        atk: Math.floor(atk),
+        isBoss, isElite
+      };
+
+      document.getElementById('monster-name').textContent = monster.name;
+      document.getElementById('monster-avatar').textContent = isBoss ? '🐉' : (isElite ? '💀' : MONSTERS[monsterIndex]);
+      document.getElementById('map-name').textContent = `${map.name} - 第 ${game.currentWave} 波${isElite ? ' (精英)' : ''}${isBoss ? ' (Boss)' : ''}`;
+      updateMonsterHP();
+    }
+
+    function calculateDamage(attacker, defender, multiplier) {
+      let damage = Math.max(1, (attacker.atk - defender.def * 0.5) * multiplier);
+      const isCrit = Math.random() < (attacker.critRate || 0.1);
+      if (isCrit) damage *= 2;
+      return { damage: Math.floor(damage), isCrit };
+    }
+
+    function playerAttack(skillIndex = 0) {
+      const skill = SKILLS[skillIndex];
+
+      // 检查冷却和能量
+      if (skill.cooldown > 0 && game.skillCooldowns[skillIndex] > Date.now()) return;
+      if (game.mp < skill.cost) return;
+
+      game.mp -= skill.cost;
+      game.skillCooldowns[skillIndex] = Date.now() + skill.cooldown;
+
+      const { damage, isCrit } = calculateDamage(game, monster, skill.multiplier);
+      monster.hp -= damage;
+
+      let logText = `你使用${skill.name}对${monster.name}造成 ${damage} 伤害`;
+      if (isCrit) logText += ' (暴击!)';
+      addLog(logText, 'damage');
+
+      if (skill.type === 'lifesteal') {
+        const heal = Math.floor(damage);
+        game.hp = Math.min(game.maxHp, game.hp + heal);
+        addLog(`吸取了 ${heal} 生命`, 'heal');
+      }
+
+      if (skill.type === 'aoe') {
+        addLog('AOE对全体敌人造成伤害!', 'damage');
+      }
+
+      checkMonsterDeath();
+      updateUI();
+    }
+
+    function monsterAttack() {
+      if (!monster || monster.hp <= 0) return;
+
+      const damage = Math.max(1, monster.atk - game.def * 0.5);
+      game.hp -= Math.floor(damage);
+      addLog(`${monster.name}对你造成 ${Math.floor(damage)} 伤害`, 'damage');
+
+      if (game.hp <= 0) {
+        game.hp = 0;
+        gameOver();
+      }
+
+      updateUI();
+    }
+
+    function checkMonsterDeath() {
+      if (monster && monster.hp <= 0) {
+        const map = MAPS[game.currentMap];
+
+        // 奖励
+        let exp = map.exp * game.currentWave;
+        let gold = map.gold * game.currentWave;
+        if (monster.isElite) { exp *= 2; gold *= 2; }
+        if (monster.isBoss) { exp *= 5; gold *= 5; }
+
+        addExp(exp);
+        game.gold += gold;
+        addLog(`击败 ${monster.name}，获得 ${exp} 经验和 ${gold} 金币`, 'levelup');
+
+        // 掉落装备
+        if (Math.random() < 0.3) {
+          dropEquipment();
+        }
+
+        // 下一波
+        if (game.currentWave < map.waves) {
+          game.currentWave++;
+          spawnMonster();
+        } else if (game.currentMap < MAPS.length - 1) {
+          game.currentMap++;
+          game.currentWave = 1;
+          addLog(`解锁新地图: ${MAPS[game.currentMap].name}`, 'levelup');
+          spawnMonster();
+        } else {
+          addLog('🎉 恭喜通关所有地图!', 'levelup');
+        }
+
+        updateUI();
+      }
+    }
+
+    function useSkill(index) {
+      playerAttack(index);
+    }
+
+    function gameOver() {
+      gameRunning = false;
+      document.getElementById('game-over').classList.add('show');
+      document.getElementById('death-info').textContent = `你在 ${MAPS[game.currentMap].name} 第 ${game.currentWave} 波倒下`;
+    }
+
+    function revive() {
+      if (game.gold >= 100) {
+        game.gold -= 100;
+        game.hp = game.maxHp;
+        gameRunning = true;
+        document.getElementById('game-over').classList.remove('show');
+        updateUI();
+        addLog('花费100金币复活', 'heal');
+      } else {
+        addLog('金币不足!', 'damage');
+      }
+    }
+
+    function retry() {
+      game.currentWave = 1;
+      game.hp = game.maxHp;
+      game.mp = game.maxMp;
+      gameRunning = true;
+      document.getElementById('game-over').classList.remove('show');
+      spawnMonster();
+      updateUI();
+    }
+
+    // ============ 升级系统 ============
+    function addExp(amount) {
+      game.exp += amount;
+      const needed = getExpForLevel(game.level);
+
+      while (game.exp >= needed && game.level < 999) {
+        game.exp -= needed;
+        game.level++;
+        game.maxHp += 10;
+        game.hp = game.maxHp;
+        game.atk += 2;
+        game.def += 1;
+        game.maxMp += 5;
+        game.mp = game.maxMp;
+        addLog(`升级! Lv.${game.level}`, 'levelup');
+      }
+
+      updateUI();
+    }
+
+    // ============ 装备系统 ============
+    function dropEquipment() {
+      const quality = getQuality();
+      const types = ['weapon', 'armor', 'accessory'];
+      const type = types[random(0, 2)];
+
+      const baseStats = {
+        weapon: { atk: 5 + quality * 3 },
+        armor: { def: 3 + quality * 2, hp: 20 + quality * 10 },
+        accessory: { critRate: 0.02 + quality * 0.02, hp: 10 + quality * 5 }
+      };
+
+      const icons = { weapon: '⚔️', armor: '🛡️', accessory: '💍' };
+      const names = { weapon: ['木剑', '铁剑', '钢剑', '魔剑', '圣剑'], armor: ['布衣', '皮甲', '锁甲', '板甲', '圣甲'], accessory: ['戒指', '项链', '护符', '徽章', '圣徽'] };
+
+      const item = {
+        type, quality,
+        name: names[type][quality],
+        icon: icons[type],
+        stats: baseStats[type]
+      };
+
+      game.inventory.push(item);
+      addLog(`获得 ${QUALITIES[quality]}${item.name}!`, 'drop');
+    }
+
+    function equipItem(index) {
+      const item = game.inventory[index];
+      if (!item) return;
+
+      const oldItem = game.equipment[item.type];
+
+      // 卸下旧装备
+      if (oldItem) {
+        game.inventory.push(oldItem);
+      }
+
+      // 穿上新装备
+      game.equipment[item.type] = item;
+      game.inventory.splice(index, 1);
+
+      // 更新属性
+      recalculateStats();
+      updateUI();
+      saveGame();
+    }
+
+    function sellItem(index) {
+      const item = game.inventory[index];
+      if (!item) return;
+
+      const prices = [10, 25, 50, 100, 200];
+      game.gold += prices[item.quality];
+      game.inventory.splice(index, 1);
+
+      addLog(`出售 ${item.name}，获得 ${prices[item.quality]} 金币`, 'levelup');
+      updateUI();
+      saveGame();
+    }
+
+    function recalculateStats() {
+      // 基础属性
+      game.atk = 10 + (game.level - 1) * 2;
+      game.def = 2 + (game.level - 1);
+      game.maxHp = 100 + (game.level - 1) * 10;
+      game.maxMp = 50 + (game.level - 1) * 5;
+      game.critRate = 0.1;
+
+      // 加上装备属性
+      for (const slot of ['weapon', 'armor', 'accessory']) {
+        const item = game.equipment[slot];
+        if (item) {
+          if (item.stats.atk) game.atk += item.stats.atk;
+          if (item.stats.def) game.def += item.stats.def;
+          if (item.stats.hp) game.maxHp += item.stats.hp;
+          if (item.stats.critRate) game.critRate += item.stats.critRate;
+        }
+      }
+
+      // 确保hp不超过maxHp
+      game.hp = Math.min(game.hp, game.maxHp);
+      game.mp = Math.min(game.mp, game.maxMp);
+    }
+
+    // ============ 商店系统 ============
+    function buyItem(type) {
+      switch (type) {
+        case 'random':
+          if (game.gold >= 100) {
+            game.gold -= 100;
+            dropEquipment();
+            saveGame();
+          }
+          break;
+        case 'hp':
+          if (game.gold >= 50) {
+            game.gold -= 50;
+            game.hp = Math.min(game.maxHp, game.hp + Math.floor(game.maxHp * 0.5));
+            addLog('使用生命药水', 'heal');
+            saveGame();
+          }
+          break;
+        case 'mp':
+          if (game.gold >= 50) {
+            game.gold -= 50;
+            game.mp = Math.min(game.maxMp, game.mp + Math.floor(game.maxMp * 0.5));
+            addLog('使用魔法药水', 'heal');
+            saveGame();
+          }
+          break;
+      }
+      updateUI();
+    }
+
+    // ============ UI 更新 ============
+    function updateUI() {
+      // 状态栏
+      document.getElementById('level').textContent = `Lv.${game.level}`;
+      document.getElementById('gold').textContent = formatNum(game.gold);
+      document.getElementById('hp-text').textContent = `${formatNum(game.hp)}/${formatNum(game.maxHp)}`;
+      document.getElementById('mp-text').textContent = `${formatNum(game.mp)}/${formatNum(game.maxMp)}`;
+      document.getElementById('exp-text').textContent = `${formatNum(game.exp)}/${formatNum(getExpForLevel(game.level))}`;
+
+      document.getElementById('hp-bar').style.width = `${(game.hp / game.maxHp) * 100}%`;
+      document.getElementById('mp-bar').style.width = `${(game.mp / game.maxMp) * 100}%`;
+      document.getElementById('exp-bar').style.width = `${(game.exp / getExpForLevel(game.level)) * 100}%`;
+
+      // 玩家血条
+      document.getElementById('player-hp-bar').style.width = `${(game.hp / game.maxHp) * 100}%`;
+
+      // 技能冷却
+      for (let i = 0; i < 4; i++) {
+        const cdEl = document.getElementById(`cd-${i}`);
+        const remaining = game.skillCooldowns[i] - Date.now();
+        if (remaining > 0) {
+          cdEl.style.display = 'flex';
+          cdEl.textContent = Math.ceil(remaining / 1000);
+        } else {
+          cdEl.style.display = 'none';
+        }
+      }
+
+      // 背包
+      renderInventory();
+
+      // 装备栏
+      for (const slot of ['weapon', 'armor', 'accessory']) {
+        const el = document.getElementById(`equip-${slot}`);
+        const item = game.equipment[slot];
+        if (item) {
+          el.textContent = item.icon;
+        } else {
+          el.textContent = '❓';
+          el.className = 'equip-slot-icon equip-slot-empty';
+        }
+      }
+    }
+
+    function updateMonsterHP() {
+      if (!monster) return;
+      document.getElementById('monster-hp-bar').style.width = `${(monster.hp / monster.maxHp) * 100}%`;
+    }
+
+    function renderInventory() {
+      const container = document.getElementById('inventory');
+      container.innerHTML = '';
+
+      for (let i = 0; i < game.inventory.length; i++) {
+        const item = game.inventory[i];
+        const div = document.createElement('div');
+        div.className = `item quality-${item.quality}`;
+        div.innerHTML = `
+          <div class="item-icon">${item.icon}</div>
+          <div class="item-name" style="color:${QUALITY_COLORS[item.quality]}">${item.name}</div>
+        `;
+        div.onclick = () => {
+          if (confirm(`装备 ${item.name}?\n点击确定装备，取消出售`)) {
+            equipItem(i);
+          } else {
+            sellItem(i);
+          }
+        };
+        container.appendChild(div);
+      }
+
+      if (game.inventory.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#888;grid-column:1/-1;padding:20px;">背包空空如也</p>';
+      }
+    }
+
+    function addLog(text, type = '') {
+      const log = document.getElementById('combat-log');
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+
+      // 限制日志数量
+      while (log.children.length > 50) {
+        log.removeChild(log.firstChild);
+      }
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelector(`.tab:nth-child(${['backpack','skills','shop','settings'].indexOf(tab) + 1})`).classList.add('active');
+      document.getElementById(`panel-${tab}`).classList.add('active');
+    }
+
+    function showEquipSlot(slot) {
+      const item = game.equipment[slot];
+      if (item) {
+        alert(`${item.name}\n品质: ${QUALITIES[item.quality]}\n属性: ${JSON.stringify(item.stats)}`);
+      }
+    }
+
+    // ============ 游戏循环 ============
+    function gameLoop() {
+      if (!gameRunning) {
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      const now = Date.now();
+      const delta = now - lastTick;
+
+      // 100ms tick
+      if (delta >= 100) {
+        lastTick = now;
+
+        // 怪物攻击
+        monsterAttack();
+
+        // 自动攻击
+        if (game.autoAttack && monster && monster.hp > 0) {
+          playerAttack(0);
+        }
+
+        // 被动回蓝
+        game.mp = Math.min(game.maxMp, game.mp + 0.5);
+      }
+
+      // 更新冷却显示
+      for (let i = 0; i < 4; i++) {
+        const cdEl = document.getElementById(`cd-${i}`);
+        const remaining = game.skillCooldowns[i] - Date.now();
+        if (remaining > 0) {
+          cdEl.style.display = 'flex';
+          cdEl.textContent = Math.ceil(remaining / 1000);
+        } else {
+          cdEl.style.display = 'none';
+        }
+      }
+
+      updateMonsterHP();
+      updateUI();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ============ 初始化 ============
+    function init() {
+      loadGame();
+
+      if (!monster) {
+        spawnMonster();
+      }
+
+      gameLoop();
+
+      // 自动存档
+      setInterval(saveGame, 30000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
